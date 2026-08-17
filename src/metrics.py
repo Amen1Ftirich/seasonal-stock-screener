@@ -119,3 +119,66 @@ def metrics_to_series(metrics: dict) -> pd.Series:
     """
 
     return pd.Series(metrics)
+def calculate_relative_metrics(
+    seasonal_returns: pd.DataFrame,
+    benchmark_name: str = "SPY",
+) -> dict:
+    """
+    Calculate performance relative to a benchmark.
+    """
+
+    benchmark_column = f"{benchmark_name} Return"
+    beat_column = f"Beat {benchmark_name}"
+
+    required = {
+        benchmark_column,
+        "Excess Return",
+        beat_column,
+    }
+
+    missing = required.difference(
+        seasonal_returns.columns
+    )
+
+    if missing:
+        raise ValueError(
+            f"Missing benchmark columns: {sorted(missing)}"
+        )
+
+    valid = seasonal_returns.dropna(
+        subset=[
+            benchmark_column,
+            "Excess Return",
+        ]
+    )
+
+    if valid.empty:
+        return {
+            "benchmark_sample_size": 0,
+            "beat_benchmark_rate": 0.0,
+            "average_excess_return": 0.0,
+            "median_excess_return": 0.0,
+            "best_excess_return": 0.0,
+            "worst_excess_return": 0.0,
+        }
+
+    excess = valid["Excess Return"]
+
+    return {
+        "benchmark_sample_size": len(valid),
+        "beat_benchmark_rate": float(
+            valid[beat_column].mean()
+        ),
+        "average_excess_return": float(
+            excess.mean()
+        ),
+        "median_excess_return": float(
+            excess.median()
+        ),
+        "best_excess_return": float(
+            excess.max()
+        ),
+        "worst_excess_return": float(
+            excess.min()
+        ),
+    }
