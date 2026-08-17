@@ -9,7 +9,7 @@ from src.data import (
     load_price_map,
 )
 from src.scanner import scan_loaded_tickers
-
+from src.dedup import deduplicate_opportunities
 
 def generate_upcoming_dates(
     start_date: date | None = None,
@@ -207,5 +207,9 @@ def discover_upcoming_windows(
             len(opportunities) + 1,
         ),
     )
-
+    opportunities = deduplicate_opportunities(
+        opportunities,
+        entry_tolerance_days=3,
+        holding_tolerance_days=5,
+    )
     return opportunities, error_df

@@ -301,13 +301,19 @@ display_columns = [
     "Ticker",
     "Upcoming Entry Date",
     "Holding Days",
-    "Sample Size",
+
     "Win Rate",
     "Median Return",
-    "Beat SPY Rate",
-    "Median Excess Return",
-    "Wilson Lower Bound",
-    "Worst Return",
+
+    "Train Win Rate",
+    "Train Wilson",
+
+    "OOS Win Rate",
+    "OOS Median Return",
+    "OOS Beat SPY Rate",
+    "OOS Median Excess",
+
+    "Sample Size",
 ]
 
 
@@ -371,6 +377,42 @@ st.dataframe(
                 "Worst Year",
                 format="%.2%%",
             ),
+        "OOS Win Rate":
+            st.column_config.NumberColumn(
+                "OOS Win",
+                format="percent",
+            ),
+
+        "OOS Median Return":
+            st.column_config.NumberColumn(
+                "OOS Median",
+                format="percent",
+            ),
+
+        "OOS Beat SPY Rate":
+            st.column_config.NumberColumn(
+                "OOS Beat SPY",
+                format="percent",
+            ),
+
+        "OOS Median Excess":
+            st.column_config.NumberColumn(
+                "OOS Excess",
+                format="percent",
+            ),
+
+        "Train Win Rate":
+            st.column_config.NumberColumn(
+                "Train Win",
+                format="percent",
+            ),
+
+        "Train Wilson":
+            st.column_config.NumberColumn(
+                "Train Confidence",
+                format="percent",
+            ),
+        
     },
 )
 

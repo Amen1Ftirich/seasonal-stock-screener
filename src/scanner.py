@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pandas as pd
-
+from src.validation import calculate_validation_metrics
 from src.benchmark import add_benchmark_returns
 from src.data import get_price_history
 from src.metrics import (
@@ -51,8 +51,14 @@ def analyze_prices(
     relative = calculate_relative_metrics(
         comparison,
         benchmark_name=benchmark_name,
+    
     )
 
+    validation = calculate_validation_metrics(
+    observations=comparison,
+    benchmark_name=benchmark_name,
+    test_years=5,
+    )
     return {
         "Ticker": ticker,
         "Entry Month": entry_month,
@@ -92,6 +98,39 @@ def analyze_prices(
 
         "Worst Excess Return":
             relative["worst_excess_return"],
+                "Train Sample Size":
+            validation["Train Sample Size"],
+
+        "Train Win Rate":
+            validation["Train Win Rate"],
+
+        "Train Median Return":
+            validation["Train Median Return"],
+
+        "Train Wilson":
+            validation["Train Wilson"],
+
+        "Train Beat SPY Rate":
+            validation["Train Beat SPY Rate"],
+
+        "Train Median Excess":
+            validation["Train Median Excess"],
+
+
+        "OOS Sample Size":
+            validation["OOS Sample Size"],
+
+        "OOS Win Rate":
+            validation["OOS Win Rate"],
+
+        "OOS Median Return":
+            validation["OOS Median Return"],
+
+        "OOS Beat SPY Rate":
+            validation["OOS Beat SPY Rate"],
+
+        "OOS Median Excess":
+            validation["OOS Median Excess"],
     }
 
 
@@ -133,34 +172,30 @@ def passes_filters(
     minimum_beat_benchmark_rate: float | None,
     minimum_median_excess_return: float | None,
 ) -> bool:
-    """
-    Check whether one seasonal result passes screener filters.
-    """
 
-    if result["Sample Size"] < minimum_sample_size:
+    if result["Train Sample Size"] < minimum_sample_size:
         return False
 
-    if result["Win Rate"] < minimum_win_rate:
+    if result["Train Win Rate"] < minimum_win_rate:
         return False
 
     if (
         minimum_median_return is not None
-        and result["Median Return"] < minimum_median_return
+        and result["Train Median Return"]
+        < minimum_median_return
     ):
         return False
 
-    benchmark_column = f"Beat {benchmark_name} Rate"
-
     if (
         minimum_beat_benchmark_rate is not None
-        and result[benchmark_column]
+        and result["Train Beat SPY Rate"]
         < minimum_beat_benchmark_rate
     ):
         return False
 
     if (
         minimum_median_excess_return is not None
-        and result["Median Excess Return"]
+        and result["Train Median Excess"]
         < minimum_median_excess_return
     ):
         return False
@@ -234,12 +269,17 @@ def scan_loaded_tickers(
 
     results = results.sort_values(
         by=[
-            "Wilson Lower Bound",
-            f"Beat {benchmark_name} Rate",
-            "Median Excess Return",
-            "Median Return",
-        ],
-        ascending=False,
+        "Train Wilson",
+        "Train Beat SPY Rate",
+        "Train Median Excess",
+        "Train Median Return",
+    ],
+    ascending=[
+        False,
+        False,
+        False,
+        False,
+    ],
     ).reset_index(drop=True)
 
     results.insert(
