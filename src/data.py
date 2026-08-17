@@ -101,3 +101,51 @@ def get_price_history(
     save_price_cache(ticker, data)
 
     return data
+def load_price_map(
+    tickers: list[str],
+) -> tuple[dict[str, pd.DataFrame], pd.DataFrame]:
+    """
+    Load historical prices for multiple tickers once.
+
+    Returns:
+        price_map:
+            {
+                "AAPL": DataFrame,
+                "MSFT": DataFrame,
+                ...
+            }
+
+        errors:
+            DataFrame describing tickers that failed.
+    """
+
+    price_map = {}
+    errors = []
+
+    cleaned_tickers = sorted(
+        {
+            ticker.upper().strip()
+            for ticker in tickers
+            if ticker.strip()
+        }
+    )
+
+    for ticker in cleaned_tickers:
+
+        try:
+            price_map[ticker] = get_price_history(
+                ticker
+            )
+
+        except Exception as exc:
+            errors.append(
+                {
+                    "Ticker": ticker,
+                    "Error": str(exc),
+                }
+            )
+
+    return (
+        price_map,
+        pd.DataFrame(errors),
+    )

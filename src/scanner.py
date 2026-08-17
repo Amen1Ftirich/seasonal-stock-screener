@@ -11,8 +11,9 @@ from src.metrics import (
 from src.seasonality import get_seasonal_returns
 
 
-def analyze_ticker(
+def analyze_prices(
     ticker: str,
+    prices: pd.DataFrame,
     benchmark_prices: pd.DataFrame,
     entry_month: int,
     entry_day: int,
@@ -21,12 +22,10 @@ def analyze_ticker(
     benchmark_name: str = "SPY",
 ) -> dict:
     """
-    Run the complete seasonal analysis for one ticker.
+    Analyze already-loaded price data.
+
+    This is the fast path used by the discovery engine.
     """
-
-    ticker = ticker.upper().strip()
-
-    prices = get_price_history(ticker)
 
     seasonal = get_seasonal_returns(
         prices=prices,
@@ -96,6 +95,162 @@ def analyze_ticker(
     }
 
 
+def analyze_ticker(
+    ticker: str,
+    benchmark_prices: pd.DataFrame,
+    entry_month: int,
+    entry_day: int,
+    holding_days: int,
+    lookback_years: int = 15,
+    benchmark_name: str = "SPY",
+) -> dict:
+    """
+    Convenience wrapper for analyzing one ticker from disk/cache.
+    """
+
+    ticker = ticker.upper().strip()
+
+    prices = get_price_history(ticker)
+
+    return analyze_prices(
+        ticker=ticker,
+        prices=prices,
+        benchmark_prices=benchmark_prices,
+        entry_month=entry_month,
+        entry_day=entry_day,
+        holding_days=holding_days,
+        lookback_years=lookback_years,
+        benchmark_name=benchmark_name,
+    )
+
+
+def passes_filters(
+    result: dict,
+    benchmark_name: str,
+    minimum_win_rate: float,
+    minimum_sample_size: int,
+    minimum_median_return: float | None,
+    minimum_beat_benchmark_rate: float | None,
+    minimum_median_excess_return: float | None,
+) -> bool:
+    """
+    Check whether one seasonal result passes screener filters.
+    """
+
+    if result["Sample Size"] < minimum_sample_size:
+        return False
+
+    if result["Win Rate"] < minimum_win_rate:
+        return False
+
+    if (
+        minimum_median_return is not None
+        and result["Median Return"] < minimum_median_return
+    ):
+        return False
+
+    benchmark_column = f"Beat {benchmark_name} Rate"
+
+    if (
+        minimum_beat_benchmark_rate is not None
+        and result[benchmark_column]
+        < minimum_beat_benchmark_rate
+    ):
+        return False
+
+    if (
+        minimum_median_excess_return is not None
+        and result["Median Excess Return"]
+        < minimum_median_excess_return
+    ):
+        return False
+
+    return True
+
+
+def scan_loaded_tickers(
+    price_map: dict[str, pd.DataFrame],
+    benchmark_prices: pd.DataFrame,
+    entry_month: int,
+    entry_day: int,
+    holding_days: int,
+    lookback_years: int = 15,
+    benchmark_name: str = "SPY",
+    minimum_win_rate: float = 0.0,
+    minimum_sample_size: int = 0,
+    minimum_median_return: float | None = None,
+    minimum_beat_benchmark_rate: float | None = None,
+    minimum_median_excess_return: float | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Scan stocks that have already been loaded into memory.
+    """
+
+    rows = []
+    errors = []
+
+    for ticker, prices in price_map.items():
+
+        try:
+            result = analyze_prices(
+                ticker=ticker,
+                prices=prices,
+                benchmark_prices=benchmark_prices,
+                entry_month=entry_month,
+                entry_day=entry_day,
+                holding_days=holding_days,
+                lookback_years=lookback_years,
+                benchmark_name=benchmark_name,
+            )
+
+            if passes_filters(
+                result=result,
+                benchmark_name=benchmark_name,
+                minimum_win_rate=minimum_win_rate,
+                minimum_sample_size=minimum_sample_size,
+                minimum_median_return=minimum_median_return,
+                minimum_beat_benchmark_rate=(
+                    minimum_beat_benchmark_rate
+                ),
+                minimum_median_excess_return=(
+                    minimum_median_excess_return
+                ),
+            ):
+                rows.append(result)
+
+        except Exception as exc:
+            errors.append(
+                {
+                    "Ticker": ticker,
+                    "Error": str(exc),
+                }
+            )
+
+    results = pd.DataFrame(rows)
+    error_df = pd.DataFrame(errors)
+
+    if results.empty:
+        return results, error_df
+
+    results = results.sort_values(
+        by=[
+            "Wilson Lower Bound",
+            f"Beat {benchmark_name} Rate",
+            "Median Excess Return",
+            "Median Return",
+        ],
+        ascending=False,
+    ).reset_index(drop=True)
+
+    results.insert(
+        0,
+        "Rank",
+        range(1, len(results) + 1),
+    )
+
+    return results, error_df
+
+
 def scan_tickers(
     tickers: list[str],
     entry_month: int,
@@ -110,18 +265,17 @@ def scan_tickers(
     minimum_median_excess_return: float | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Scan multiple tickers and return:
+    Normal scanner interface.
 
-    1. ranked qualifying opportunities
-    2. tickers that failed during processing
+    Loads each ticker once, then uses the in-memory scanner.
     """
 
     benchmark_prices = get_price_history(
         benchmark_name
     )
 
-    rows = []
-    errors = []
+    price_map = {}
+    loading_errors = []
 
     cleaned_tickers = sorted(
         {
@@ -134,90 +288,53 @@ def scan_tickers(
     for ticker in cleaned_tickers:
 
         try:
-            result = analyze_ticker(
-                ticker=ticker,
-                benchmark_prices=benchmark_prices,
-                entry_month=entry_month,
-                entry_day=entry_day,
-                holding_days=holding_days,
-                lookback_years=lookback_years,
-                benchmark_name=benchmark_name,
+            price_map[ticker] = get_price_history(
+                ticker
             )
 
-            rows.append(result)
-
         except Exception as exc:
-
-            errors.append(
+            loading_errors.append(
                 {
                     "Ticker": ticker,
                     "Error": str(exc),
                 }
             )
 
-    results = pd.DataFrame(rows)
-
-    error_df = pd.DataFrame(errors)
-
-    if results.empty:
-        return results, error_df
-
-    results = results[
-        results["Sample Size"]
-        >= minimum_sample_size
-    ]
-
-    results = results[
-        results["Win Rate"]
-        >= minimum_win_rate
-    ]
-
-    if minimum_median_return is not None:
-
-        results = results[
-            results["Median Return"]
-            >= minimum_median_return
-        ]
-
-    if minimum_beat_benchmark_rate is not None:
-
-        column = f"Beat {benchmark_name} Rate"
-
-        results = results[
-            results[column]
-            >= minimum_beat_benchmark_rate
-        ]
-
-    if minimum_median_excess_return is not None:
-
-        results = results[
-            results["Median Excess Return"]
-            >= minimum_median_excess_return
-        ]
-
-    # Rank statistical reliability first,
-    # then market-relative performance.
-    results = results.sort_values(
-        by=[
-            "Wilson Lower Bound",
-            f"Beat {benchmark_name} Rate",
-            "Median Excess Return",
-            "Median Return",
-        ],
-        ascending=[
-            False,
-            False,
-            False,
-            False,
-        ],
+    results, scan_errors = scan_loaded_tickers(
+        price_map=price_map,
+        benchmark_prices=benchmark_prices,
+        entry_month=entry_month,
+        entry_day=entry_day,
+        holding_days=holding_days,
+        lookback_years=lookback_years,
+        benchmark_name=benchmark_name,
+        minimum_win_rate=minimum_win_rate,
+        minimum_sample_size=minimum_sample_size,
+        minimum_median_return=minimum_median_return,
+        minimum_beat_benchmark_rate=(
+            minimum_beat_benchmark_rate
+        ),
+        minimum_median_excess_return=(
+            minimum_median_excess_return
+        ),
     )
 
-    results = results.reset_index(drop=True)
+    all_errors = []
 
-    results.insert(
-        0,
-        "Rank",
-        range(1, len(results) + 1),
-    )
+    if loading_errors:
+        all_errors.append(
+            pd.DataFrame(loading_errors)
+        )
+
+    if not scan_errors.empty:
+        all_errors.append(scan_errors)
+
+    if all_errors:
+        error_df = pd.concat(
+            all_errors,
+            ignore_index=True,
+        )
+    else:
+        error_df = pd.DataFrame()
 
     return results, error_df
