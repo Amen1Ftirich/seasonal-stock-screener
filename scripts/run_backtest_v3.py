@@ -1,5 +1,6 @@
 from src.backtest_v3 import (
     run_walk_forward_v3,
+    summarize_signal_diagnostics,
     summarize_v3,
 )
 
@@ -98,7 +99,7 @@ print()
 print("Running V3 walk-forward...")
 
 
-trades, monthly = (
+trades, monthly, diagnostics = (
     run_walk_forward_v3(
 
         panel=panel,
@@ -120,6 +121,29 @@ trades, monthly = (
 
 summary = summarize_v3(
     monthly
+)
+
+diagnostics.to_csv(
+    "data/cache/v4_signal_diagnostics.csv",
+    index=False,
+)
+
+
+monthly.to_csv(
+    "data/cache/v4_monthly_results.csv",
+    index=False,
+)
+
+
+trades.to_csv(
+    "data/cache/v4_trades.csv",
+    index=False,
+)
+
+signal_summary = (
+    summarize_signal_diagnostics(
+        diagnostics
+    )
 )
 
 
@@ -155,6 +179,42 @@ for key, value in summary.items():
             f"{key}: {value:.2%}"
         )
 
+print()
+print(
+    "======================================"
+)
+
+print(
+    "CROSS-SECTIONAL SIGNAL DIAGNOSTICS"
+)
+
+print(
+    "======================================"
+)
+
+
+for key, value in signal_summary.items():
+
+    if key == "Diagnostic Months":
+
+        print(
+            f"{key}: {value}"
+        )
+
+    elif (
+        "T-Stat" in key
+        or "IC" in key
+    ):
+
+        print(
+            f"{key}: {value:.3f}"
+        )
+
+    else:
+
+        print(
+            f"{key}: {value:.2%}"
+        )
 
 print()
 print(

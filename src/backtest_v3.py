@@ -114,6 +114,7 @@ def run_walk_forward_v3(
 
     trades = []
     monthly_results = []
+    diagnostic_results = []
 
     for number, period in enumerate(
         test_periods,
@@ -180,7 +181,163 @@ def run_walk_forward_v3(
                 cross_section=test,
             )
         )
+        #
+        # ---------------------------------------------
+        # CROSS-SECTIONAL SIGNAL DIAGNOSTICS
+        # ---------------------------------------------
+        #
+        # Predictions were made without seeing the
+        # current month's outcome.
+        #
+        # We now reveal current returns purely for
+        # evaluation.
+        #
 
+        diagnostic = predicted.dropna(
+            subset=[
+                "Predicted Residual Return",
+                "Alpha Quality Score",
+                "Residual Return",
+                "Excess Return",
+            ]
+        ).copy()
+
+
+        if len(diagnostic) >= 20:
+
+            #
+            # Information Coefficient
+            #
+            # Spearman correlation asks whether stocks
+            # ranked highly by the model actually tended
+            # to produce higher realized residual returns.
+            #
+
+            prediction_ic = (
+                diagnostic[
+                    "Predicted Residual Return"
+                ]
+                .corr(
+                    diagnostic[
+                        "Residual Return"
+                    ],
+                    method="spearman",
+                )
+            )
+
+
+            quality_ic = (
+                diagnostic[
+                    "Alpha Quality Score"
+                ]
+                .corr(
+                    diagnostic[
+                        "Residual Return"
+                    ],
+                    method="spearman",
+                )
+            )
+
+
+            #
+            # Sort by predicted residual alpha.
+            #
+
+            ranked = diagnostic.sort_values(
+                "Predicted Residual Return",
+                ascending=False,
+            ).reset_index(drop=True)
+
+
+            decile_size = max(
+                1,
+                len(ranked) // 10,
+            )
+
+
+            top_decile = ranked.head(
+                decile_size
+            )
+
+
+            bottom_decile = ranked.tail(
+                decile_size
+            )
+
+
+            top_residual = float(
+                top_decile[
+                    "Residual Return"
+                ].mean()
+            )
+
+
+            bottom_residual = float(
+                bottom_decile[
+                    "Residual Return"
+                ].mean()
+            )
+
+
+            residual_spread = (
+                top_residual
+                - bottom_residual
+            )
+
+
+            top_excess = float(
+                top_decile[
+                    "Excess Return"
+                ].mean()
+            )
+
+
+            bottom_excess = float(
+                bottom_decile[
+                    "Excess Return"
+                ].mean()
+            )
+
+
+            excess_spread = (
+                top_excess
+                - bottom_excess
+            )
+
+
+            diagnostic_results.append(
+                {
+                    "Period":
+                        period,
+
+                    "Universe Size":
+                        len(diagnostic),
+
+                    "Prediction IC":
+                        prediction_ic,
+
+                    "Quality IC":
+                        quality_ic,
+
+                    "Top Decile Residual":
+                        top_residual,
+
+                    "Bottom Decile Residual":
+                        bottom_residual,
+
+                    "Residual Spread":
+                        residual_spread,
+
+                    "Top Decile Excess":
+                        top_excess,
+
+                    "Bottom Decile Excess":
+                        bottom_excess,
+
+                    "Excess Spread":
+                        excess_spread,
+                }
+            )
         selected = (
             predicted
             .head(top_n)
@@ -265,9 +422,16 @@ def run_walk_forward_v3(
         monthly_results
     )
 
+
+    diagnostic_df = pd.DataFrame(
+        diagnostic_results
+    )
+
+
     return (
         trade_df,
         monthly_df,
+        diagnostic_df,
     )
 
 
@@ -368,6 +532,283 @@ def summarize_v3(
             float(
                 monthly_results[
                     "Portfolio Beta"
+                ].mean()
+            ),
+    }
+def hac_mean_t_stat(
+    values: pd.Series,
+    max_lag: int = 3,
+) -> float:
+    """
+    Newey-West style HAC t-statistic for the mean.
+
+    More appropriate than the ordinary t-stat when
+    monthly observations may be serially correlated.
+    """
+
+    values = (
+        values
+        .dropna()
+        .astype(float)
+    )
+
+    n = len(values)
+
+    if n < 2:
+        return 0.0
+
+    x = (
+        values.to_numpy()
+        - values.mean()
+    )
+
+    gamma_zero = (
+        x @ x
+    ) / n
+
+    long_run_variance = gamma_zero
+
+    for lag in range(
+        1,
+        min(max_lag, n - 1) + 1,
+    ):
+
+        weight = (
+            1
+            - lag
+            / (max_lag + 1)
+        )
+
+        covariance = (
+            x[lag:]
+            @ x[:-lag]
+        ) / n
+
+        long_run_variance += (
+            2
+            * weight
+            * covariance
+        )
+
+    variance_of_mean = (
+        long_run_variance
+        / n
+    )
+
+    if variance_of_mean <= 0:
+        return 0.0
+
+    return float(
+        values.mean()
+        / (
+            variance_of_mean
+            ** 0.5
+        )
+    )
+
+def summarize_signal_diagnostics(
+    diagnostics: pd.DataFrame,
+) -> dict:
+    """
+    Measure whether the model possesses genuine
+    cross-sectional ranking information.
+
+    These metrics are evaluated one month at a time,
+    so months rather than individual stocks are the
+    independent observations.
+    """
+
+    if diagnostics.empty:
+
+        return {
+            "Diagnostic Months": 0,
+            "Average IC": 0.0,
+            "Median IC": 0.0,
+            "Positive IC Rate": 0.0,
+            "IC T-Stat": 0.0,
+            "Average Residual Spread": 0.0,
+            "Median Residual Spread": 0.0,
+            "Positive Spread Rate": 0.0,
+            "Spread T-Stat": 0.0,
+            "Average Excess Spread": 0.0,
+        }
+
+
+    ic = diagnostics[
+        "Prediction IC"
+    ].dropna()
+
+
+    quality_ic = diagnostics[
+        "Quality IC"
+    ].dropna()
+
+
+    spread = diagnostics[
+        "Residual Spread"
+    ].dropna()
+
+
+    excess_spread = diagnostics[
+        "Excess Spread"
+    ].dropna()
+
+
+    prediction_hac_t = (
+        hac_mean_t_stat(
+            ic,
+            max_lag=3,
+        )
+    )
+
+
+    quality_hac_t = (
+        hac_mean_t_stat(
+            quality_ic,
+            max_lag=3,
+        )
+    )
+
+
+    spread_hac_t = (
+        hac_mean_t_stat(
+            spread,
+            max_lag=3,
+        )
+    )
+
+
+    #
+    # Monthly t-stat of average IC.
+    #
+
+    if (
+        len(ic) > 1
+        and ic.std(ddof=1) > 0
+    ):
+
+        ic_t_stat = (
+            ic.mean()
+            / (
+                ic.std(ddof=1)
+                / (len(ic) ** 0.5)
+            )
+        )
+
+    else:
+
+        ic_t_stat = 0.0
+
+
+    #
+    # Monthly t-stat of top-minus-bottom
+    # residual spread.
+    #
+
+    if (
+        len(spread) > 1
+        and spread.std(ddof=1) > 0
+    ):
+
+        spread_t_stat = (
+            spread.mean()
+            / (
+                spread.std(ddof=1)
+                / (len(spread) ** 0.5)
+            )
+        )
+
+    else:
+
+        spread_t_stat = 0.0
+
+
+    return {
+        "Diagnostic Months":
+            len(diagnostics),
+
+        "Average IC":
+            float(ic.mean()),
+
+        "Median IC":
+            float(ic.median()),
+
+        "Positive IC Rate":
+            float(
+                (ic > 0).mean()
+            ),
+
+        "IC T-Stat":
+            float(ic_t_stat),
+
+        "Average Residual Spread":
+            float(
+                spread.mean()
+            ),
+
+        "Median Residual Spread":
+            float(
+                spread.median()
+            ),
+
+        "Positive Spread Rate":
+            float(
+                (spread > 0).mean()
+            ),
+
+        "Spread T-Stat":
+            float(
+                spread_t_stat
+            ),
+
+        "Average Excess Spread":
+            float(
+                excess_spread.mean()
+            ),
+        "Average Quality IC":
+            float(
+                quality_ic.mean()
+            ),
+
+        "Median Quality IC":
+            float(
+                quality_ic.median()
+            ),
+
+        "Positive Quality IC Rate":
+            float(
+                (
+                    quality_ic > 0
+                ).mean()
+            ),
+
+        "Prediction IC HAC T-Stat":
+            prediction_hac_t,
+
+        "Quality IC HAC T-Stat":
+            quality_hac_t,
+
+        "Spread HAC T-Stat":
+            spread_hac_t,
+
+        "Average Top Decile Residual":
+            float(
+                diagnostics[
+                    "Top Decile Residual"
+                ].mean()
+            ),
+
+        "Average Bottom Decile Residual":
+            float(
+                diagnostics[
+                    "Bottom Decile Residual"
+                ].mean()
+            ),
+
+        "Average Top Decile Excess":
+            float(
+                diagnostics[
+                    "Top Decile Excess"
                 ].mean()
             ),
     }
