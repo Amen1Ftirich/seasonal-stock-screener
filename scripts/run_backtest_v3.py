@@ -13,14 +13,27 @@ from src.dataset_v3 import (
 )
 
 from src.universe import (
-    get_sp500_tickers,
+    build_sp500_membership_map,
+    get_sp500_historical_union,
 )
 
 
 print("Loading S&P 500...")
 
+#
+# We need history beginning roughly ten years
+# before our 2016 test begins.
+#
 
-tickers = get_sp500_tickers()
+tickers = get_sp500_historical_union(
+    start_date="2006-01-01"
+)
+
+
+print(
+    f"Historical ticker union: "
+    f"{len(tickers)}"
+)
 
 
 price_map, errors = (
@@ -34,6 +47,34 @@ spy = get_price_history(
     "SPY"
 )
 
+print()
+print(
+    "Building point-in-time "
+    "S&P 500 membership..."
+)
+
+
+membership_map = (
+    build_sp500_membership_map(
+        start_date="2006-01",
+        end_date="2025-12",
+    )
+)
+
+
+membership_sizes = [
+    len(members)
+    for members
+    in membership_map.values()
+]
+
+
+print(
+    f"Membership size range: "
+    f"{min(membership_sizes)} "
+    f"to "
+    f"{max(membership_sizes)}"
+)
 
 print()
 print("Building panel dataset...")
@@ -70,6 +111,9 @@ trades, monthly = (
         training_years=10,
 
         alpha=10.0,
+        membership_by_period=(
+            membership_map
+        ),
     )
 )
 

@@ -17,7 +17,7 @@ def run_walk_forward_v3(
     top_n: int = 10,
     training_years: int = 10,
     alpha: float = 10.0,
-    
+
     membership_by_period: (
         dict[pd.Period, set[str]]
         | None
@@ -45,7 +45,60 @@ def run_walk_forward_v3(
         data["Period"]
         .astype("period[M]")
     )
+    #
+    # POINT-IN-TIME UNIVERSE FILTER
+    #
+    # A stock-month is allowed only if that stock
+    # actually belonged to the S&P 500 at the
+    # beginning of that historical month.
+    #
 
+    if membership_by_period is not None:
+
+        membership_flags = []
+
+        for ticker, period in zip(
+            data["Ticker"],
+            data["Period"],
+        ):
+
+            members = (
+                membership_by_period.get(
+                    period
+                )
+            )
+
+            if members is None:
+
+                membership_flags.append(
+                    False
+                )
+
+            else:
+
+                membership_flags.append(
+                    ticker in members
+                )
+
+        data[
+            "Point In Time Member"
+        ] = membership_flags
+
+        before = len(data)
+
+        data = data[
+            data[
+                "Point In Time Member"
+            ]
+        ].copy()
+
+        after = len(data)
+
+        print(
+            f"Point-in-time filter: "
+            f"{before:,} -> {after:,} "
+            f"stock-month observations"
+        )
     test_periods = sorted(
         data[
             (
