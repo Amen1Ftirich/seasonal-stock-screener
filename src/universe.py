@@ -532,6 +532,7 @@ def get_sp500_membership(
             )
 
     return members
+
 def get_sp500_historical_union(
     start_date: str | date | pd.Timestamp,
 ) -> list[str]:
@@ -539,7 +540,7 @@ def get_sp500_historical_union(
     Return every ticker that could have been an
     S&P 500 member since start_date.
 
-    This includes current members plus historical
+    Includes current members plus historical
     additions and removals.
     """
 
@@ -551,9 +552,24 @@ def get_sp500_historical_union(
         date.today()
     )
 
-    tickers = set(
-        get_sp500_tickers()
-    )
+    #
+    # Normalize current members too, just to make
+    # absolutely sure this set contains strings only.
+    #
+
+    tickers = set()
+
+    for ticker in get_sp500_tickers():
+
+        normalized = _normalize_ticker(
+            ticker
+        )
+
+        if normalized is not None:
+
+            tickers.add(
+                normalized
+            )
 
     changes = get_sp500_changes()
 
@@ -566,17 +582,54 @@ def get_sp500_historical_union(
         )
     ]
 
+    #
+    # Historical additions
+    #
+
     for ticker in relevant["Added"]:
 
-        if ticker is not None:
-            tickers.add(ticker)
+        normalized = _normalize_ticker(
+            ticker
+        )
+
+        if normalized is not None:
+
+            tickers.add(
+                normalized
+            )
+
+    #
+    # Historical removals
+    #
 
     for ticker in relevant["Removed"]:
 
-        if ticker is not None:
-            tickers.add(ticker)
+        normalized = _normalize_ticker(
+            ticker
+        )
 
-    return sorted(tickers)
+        if normalized is not None:
+
+            tickers.add(
+                normalized
+            )
+
+    #
+    # Final defensive check:
+    # return strings only.
+    #
+
+    tickers = {
+        ticker
+        for ticker in tickers
+        if isinstance(ticker, str)
+        and ticker.strip()
+    }
+
+    return sorted(
+        tickers
+    )
+
 def build_sp500_membership_map(
     start_date: str,
     end_date: str,
