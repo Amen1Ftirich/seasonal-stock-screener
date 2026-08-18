@@ -56,13 +56,21 @@ def build_panel_dataset(
                 features
             )
 
-        except Exception:
+        except Exception as exc:
+
+            print(
+                f"ERROR building features for "
+                f"{ticker}: {type(exc).__name__}: {exc}"
+            )
 
             continue
 
     if not frames:
 
-        return pd.DataFrame()
+        raise ValueError(
+            "No stock feature tables were successfully built. "
+            "Check the feature-engineering errors printed above."
+        )
 
     panel = pd.concat(
         frames,

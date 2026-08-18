@@ -17,6 +17,11 @@ def run_walk_forward_v3(
     top_n: int = 10,
     training_years: int = 10,
     alpha: float = 10.0,
+    
+    membership_by_period: (
+        dict[pd.Period, set[str]]
+        | None
+    ) = None,
 ) -> tuple[
     pd.DataFrame,
     pd.DataFrame,
@@ -96,7 +101,7 @@ def run_walk_forward_v3(
             subset=(
                 FEATURE_COLUMNS
                 + [
-                    "Excess Return",
+                    "Residual Return",
                 ]
             )
         )
@@ -146,7 +151,18 @@ def run_walk_forward_v3(
                 "Benchmark Return"
             ].iloc[0]
         )
+        portfolio_beta = float(
+            selected[
+                "Market Beta 24M"
+            ].mean()
+        )
 
+
+        realized_residual_return = float(
+            selected[
+                "Residual Return"
+            ].mean()
+        )
         excess_return = (
             portfolio_return
             - benchmark_return
@@ -173,6 +189,11 @@ def run_walk_forward_v3(
 
                 "Positive Month":
                     portfolio_return > 0,
+                "Portfolio Beta":
+                    portfolio_beta,
+
+                "Residual Alpha":
+                    realized_residual_return,
             }
         )
 
@@ -216,7 +237,11 @@ def summarize_v3(
             "Portfolio Return"
         ]
     )
-
+    residual_alpha = (
+        monthly_results[
+            "Residual Alpha"
+        ]
+    )
     return {
         "Months":
             len(monthly_results),
@@ -268,5 +293,28 @@ def summarize_v3(
         "Best Month":
             float(
                 returns.max()
+            ),
+        "Average Residual Alpha":
+            float(
+                residual_alpha.mean()
+            ),
+
+        "Median Residual Alpha":
+            float(
+                residual_alpha.median()
+            ),
+
+        "Positive Residual Alpha Rate":
+            float(
+                (
+                    residual_alpha > 0
+                ).mean()
+            ),
+
+        "Average Portfolio Beta":
+            float(
+                monthly_results[
+                    "Portfolio Beta"
+                ].mean()
             ),
     }

@@ -99,6 +99,12 @@ for key, value in summary.items():
             f"{key}: {value}"
         )
 
+    elif key == "Average Portfolio Beta":
+
+        print(
+            f"{key}: {value:.2f}"
+        )
+
     else:
 
         print(
@@ -125,12 +131,17 @@ for column in [
     "Portfolio Return",
     "Benchmark Return",
     "Excess Return",
+    "Residual Alpha",
 ]:
 
     display[column] = (
         display[column]
         * 100
     ).round(2)
+    display["Portfolio Beta"] = (
+        display["Portfolio Beta"]
+        .round(2)
+    )
 
 
 print(
