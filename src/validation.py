@@ -124,4 +124,18 @@ def calculate_validation_metrics(
 
         "OOS Median Excess":
             test_relative["median_excess_return"],
+        "Train Average Excess":
+            train_relative["average_excess_return"],
+
+        "Train Excess LCB":
+            train_relative["excess_lcb_80"],
+
+        "Train Excess Q25":
+            train_relative["excess_q25"],
+
+        "Train Worst Return":
+            train_absolute["worst_return"],
+
+        "Train Profit Factor":
+            train_absolute["profit_factor"],
     }

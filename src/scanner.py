@@ -9,7 +9,7 @@ from src.metrics import (
     calculate_relative_metrics,
 )
 from src.seasonality import get_seasonal_returns
-
+from src.walkforward import walk_forward_validate
 
 def analyze_prices(
     ticker: str,
@@ -20,6 +20,7 @@ def analyze_prices(
     holding_days: int,
     lookback_years: int = 15,
     benchmark_name: str = "SPY",
+    
 ) -> dict:
     """
     Analyze already-loaded price data.
@@ -45,7 +46,17 @@ def analyze_prices(
         benchmark_prices=benchmark_prices,
         benchmark_name=benchmark_name,
     )
-
+    walkforward_folds, walkforward = (
+        walk_forward_validate(
+            observations=comparison,
+            benchmark_name=benchmark_name,
+            minimum_training_years=8,
+            minimum_win_rate=0.70,
+            minimum_median_return=0.0,
+            minimum_beat_benchmark_rate=0.60,
+            minimum_median_excess_return=0.0,
+        )
+    )
     absolute = calculate_metrics(comparison)
 
     relative = calculate_relative_metrics(
@@ -131,6 +142,40 @@ def analyze_prices(
 
         "OOS Median Excess":
             validation["OOS Median Excess"],
+        "WF Folds":
+            walkforward["WF Folds"],
+
+        "WF Qualified Folds":
+            walkforward["WF Qualified Folds"],
+
+        "WF Selection Rate":
+            walkforward["WF Selection Rate"],
+
+        "WF Win Rate":
+            walkforward["WF Win Rate"],
+
+        "WF Beat SPY Rate":
+            walkforward["WF Beat SPY Rate"],
+
+        "WF Median Return":
+            walkforward["WF Median Return"],
+
+        "WF Median Excess":
+            walkforward["WF Median Excess"],
+        "Train Average Excess":
+            validation["Train Average Excess"],
+
+        "Train Excess LCB":
+            validation["Train Excess LCB"],
+
+        "Train Excess Q25":
+            validation["Train Excess Q25"],
+
+        "Train Worst Return":
+            validation["Train Worst Return"],
+
+        "Train Profit Factor":
+            validation["Train Profit Factor"],
     }
 
 
@@ -269,17 +314,17 @@ def scan_loaded_tickers(
 
     results = results.sort_values(
         by=[
-        "Train Wilson",
-        "Train Beat SPY Rate",
-        "Train Median Excess",
-        "Train Median Return",
-    ],
-    ascending=[
-        False,
-        False,
-        False,
-        False,
-    ],
+            "Train Excess LCB",
+            "Train Median Excess",
+            "Train Profit Factor",
+            "Train Wilson",
+        ],
+        ascending=[
+            False,
+            False,
+            False,
+            False,
+        ],
     ).reset_index(drop=True)
 
     results.insert(

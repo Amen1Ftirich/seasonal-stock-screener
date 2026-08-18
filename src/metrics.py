@@ -4,7 +4,7 @@ from math import sqrt
 
 import pandas as pd
 
-
+from scipy.stats import t
 def wilson_lower_bound(
     wins: int,
     total: int,
@@ -119,13 +119,42 @@ def metrics_to_series(metrics: dict) -> pd.Series:
     """
 
     return pd.Series(metrics)
+def mean_lower_confidence_bound(
+    values: pd.Series,
+    confidence: float = 0.80,
+) -> float:
+    """
+    One-sided lower confidence bound for the mean.
+
+    This asks:
+    what is a conservative estimate of the true average return?
+    """
+
+    values = values.dropna()
+
+    n = len(values)
+
+    if n == 0:
+        return 0.0
+
+    if n == 1:
+        return float(values.iloc[0])
+
+    mean = float(values.mean())
+    std = float(values.std(ddof=1))
+
+    standard_error = std / sqrt(n)
+
+    critical_value = t.ppf(
+        confidence,
+        df=n - 1,
+    )
+
+    return mean - critical_value * standard_error
 def calculate_relative_metrics(
     seasonal_returns: pd.DataFrame,
     benchmark_name: str = "SPY",
 ) -> dict:
-    """
-    Calculate performance relative to a benchmark.
-    """
 
     benchmark_column = f"{benchmark_name} Return"
     beat_column = f"Beat {benchmark_name}"
@@ -153,6 +182,7 @@ def calculate_relative_metrics(
     )
 
     if valid.empty:
+
         return {
             "benchmark_sample_size": 0,
             "beat_benchmark_rate": 0.0,
@@ -160,25 +190,43 @@ def calculate_relative_metrics(
             "median_excess_return": 0.0,
             "best_excess_return": 0.0,
             "worst_excess_return": 0.0,
+            "excess_std_dev": 0.0,
+            "excess_lcb_80": 0.0,
+            "excess_q25": 0.0,
         }
 
     excess = valid["Excess Return"]
 
     return {
-        "benchmark_sample_size": len(valid),
-        "beat_benchmark_rate": float(
-            valid[beat_column].mean()
-        ),
-        "average_excess_return": float(
-            excess.mean()
-        ),
-        "median_excess_return": float(
-            excess.median()
-        ),
-        "best_excess_return": float(
-            excess.max()
-        ),
-        "worst_excess_return": float(
-            excess.min()
-        ),
+        "benchmark_sample_size":
+            len(valid),
+
+        "beat_benchmark_rate":
+            float(valid[beat_column].mean()),
+
+        "average_excess_return":
+            float(excess.mean()),
+
+        "median_excess_return":
+            float(excess.median()),
+
+        "best_excess_return":
+            float(excess.max()),
+
+        "worst_excess_return":
+            float(excess.min()),
+
+        "excess_std_dev":
+            float(excess.std(ddof=1))
+            if len(excess) > 1
+            else 0.0,
+
+        "excess_lcb_80":
+            mean_lower_confidence_bound(
+                excess,
+                confidence=0.80,
+            ),
+
+        "excess_q25":
+            float(excess.quantile(0.25)),
     }

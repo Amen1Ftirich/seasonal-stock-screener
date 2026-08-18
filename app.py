@@ -18,6 +18,7 @@ from src.metrics import (
     calculate_relative_metrics,
 )
 from src.seasonality import get_seasonal_returns
+from src.walkforward import walk_forward_validate
 from src.universe import (
     TECH_TEST_UNIVERSE,
     get_sp500_tickers,
@@ -521,7 +522,15 @@ comparison = add_benchmark_returns(
     benchmark_prices=spy_prices,
     benchmark_name="SPY",
 )
-
+wf_folds, wf_summary = walk_forward_validate(
+    observations=comparison,
+    benchmark_name="SPY",
+    minimum_training_years=8,
+    minimum_win_rate=minimum_win_rate,
+    minimum_median_return=minimum_median_return,
+    minimum_beat_benchmark_rate=minimum_beat_spy,
+    minimum_median_excess_return=minimum_excess_return,
+)
 
 absolute = calculate_metrics(
     comparison
@@ -600,7 +609,104 @@ col8.metric(
     "Worst Year",
     f"{absolute['worst_return']:.2%}",
 )
+st.divider()
 
+st.subheader("Walk-Forward Validation")
+
+
+wf1, wf2, wf3, wf4 = st.columns(4)
+
+
+wf1.metric(
+    "WF Win Rate",
+    f"{wf_summary['WF Win Rate']:.1%}",
+)
+
+
+wf2.metric(
+    "WF Beat SPY",
+    f"{wf_summary['WF Beat SPY Rate']:.1%}",
+)
+
+
+wf3.metric(
+    "WF Median Return",
+    f"{wf_summary['WF Median Return']:.2%}",
+)
+
+
+wf4.metric(
+    "WF Median Excess",
+    f"{wf_summary['WF Median Excess']:.2%}",
+)
+
+
+wf5, wf6 = st.columns(2)
+
+
+wf5.metric(
+    "Historical Folds",
+    int(wf_summary["WF Folds"]),
+)
+
+
+wf6.metric(
+    "Times Strategy Qualified",
+    int(wf_summary["WF Qualified Folds"]),
+)
+st.subheader("Walk-Forward History")
+
+
+st.dataframe(
+    wf_folds,
+    use_container_width=True,
+    hide_index=True,
+
+    column_config={
+
+        "Prior Win Rate":
+            st.column_config.NumberColumn(
+                "Prior Win Rate",
+                format="percent",
+            ),
+
+        "Prior Wilson":
+            st.column_config.NumberColumn(
+                "Prior Confidence",
+                format="percent",
+            ),
+
+        "Prior Median Return":
+            st.column_config.NumberColumn(
+                "Prior Median",
+                format="percent",
+            ),
+
+        "Prior Beat SPY Rate":
+            st.column_config.NumberColumn(
+                "Prior Beat SPY",
+                format="percent",
+            ),
+
+        "Prior Median Excess":
+            st.column_config.NumberColumn(
+                "Prior Excess",
+                format="percent",
+            ),
+
+        "Realized Return":
+            st.column_config.NumberColumn(
+                "Realized Return",
+                format="percent",
+            ),
+
+        "Realized Excess Return":
+            st.column_config.NumberColumn(
+                "Realized Excess",
+                format="percent",
+            ),
+    },
+)
 
 # --------------------------------------------------
 # Charts
