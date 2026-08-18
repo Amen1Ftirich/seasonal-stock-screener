@@ -201,7 +201,69 @@ def build_stock_features(
         )
         - 1
     )
+    #
+    # RESIDUAL MOMENTUM
+    #
+    # Momentum in the stock-specific component of returns,
+    # rather than simply rewarding high-beta winners.
+    #
 
+    lagged_residual = (
+        data["Residual Return"].shift(1)
+    )
+
+
+    data["Residual Momentum 3M"] = (
+        (
+            1 + lagged_residual
+        )
+        .rolling(3)
+        .apply(
+            np.prod,
+            raw=True,
+        )
+        - 1
+    )
+
+
+    data["Residual Momentum 6M"] = (
+        (
+            1 + lagged_residual
+        )
+        .rolling(6)
+        .apply(
+            np.prod,
+            raw=True,
+        )
+        - 1
+    )
+
+
+    data["Residual Momentum 12M"] = (
+        (
+            1 + lagged_residual
+        )
+        .rolling(12)
+        .apply(
+            np.prod,
+            raw=True,
+        )
+        - 1
+    )
+
+
+    data["Idiosyncratic Volatility 6M"] = (
+        lagged_residual
+        .rolling(6)
+        .std()
+    )
+
+
+    data["Idiosyncratic Volatility 12M"] = (
+        lagged_residual
+        .rolling(12)
+        .std()
+    )
     #
     # SHORT-TERM REVERSAL
     #
