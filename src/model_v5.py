@@ -5,7 +5,9 @@ import pandas as pd
 from sklearn.linear_model import Ridge
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
-
+from src.cross_sectional import (
+    CROSS_SECTIONAL_TARGET,
+)
 
 #
 # Market-level features are deliberately excluded.
@@ -53,61 +55,6 @@ FEATURE_COLUMNS_V5 = [
     "Idiosyncratic Volatility 12M",
 ]
 
-
-TARGET_COLUMN_V5 = (
-    "Cross Sectional Residual Target"
-)
-
-
-def add_cross_sectional_target(
-    data: pd.DataFrame,
-) -> pd.DataFrame:
-    """
-    Convert realized residual return into a
-    within-month cross-sectional standardized target.
-
-    For each historical month:
-
-        residual return
-              ↓
-        subtract cross-sectional mean
-              ↓
-        divide by cross-sectional std
-
-    This changes the learning problem from:
-
-        "How large will this stock's return be?"
-
-    to:
-
-        "How strong will this stock be relative to
-         its peers this month?"
-    """
-
-    result = data.copy()
-
-    grouped = result.groupby(
-        "Period"
-    )["Residual Return"]
-
-    monthly_mean = grouped.transform(
-        "mean"
-    )
-
-    monthly_std = grouped.transform(
-        "std"
-    )
-
-    result[
-        TARGET_COLUMN_V5
-    ] = (
-        result["Residual Return"]
-        - monthly_mean
-    ) / monthly_std
-
-    return result
-
-
 def make_model_v5(
     alpha: float = 10.0,
 ) -> Pipeline:
@@ -137,7 +84,7 @@ def train_model_v5(
         subset=(
             FEATURE_COLUMNS_V5
             + [
-                TARGET_COLUMN_V5,
+                CROSS_SECTIONAL_TARGET,
             ]
         )
     )
@@ -157,7 +104,7 @@ def train_model_v5(
             FEATURE_COLUMNS_V5
         ],
         clean[
-            TARGET_COLUMN_V5
+            CROSS_SECTIONAL_TARGET
         ],
     )
 

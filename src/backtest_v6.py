@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from src.model_v5 import (
-    TARGET_COLUMN_V5,
+    CROSS_SECTIONAL_TARGET,
     add_cross_sectional_target,
 )
 
@@ -14,6 +14,11 @@ from src.model_v6 import (
     predict_cross_section_v6,
     train_model_v6,
 )
+from src.cross_sectional import (
+    CROSS_SECTIONAL_TARGET,
+    add_cross_sectional_target,
+)
+
 def run_walk_forward_v6(
     panel: pd.DataFrame,
     membership_by_period: (
@@ -162,7 +167,7 @@ def run_walk_forward_v6(
             subset=(
                 FEATURE_COLUMNS_V6
                 + [
-                    TARGET_COLUMN_V5,
+                    CROSS_SECTIONAL_TARGET,
                 ]
             )
         )

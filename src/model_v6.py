@@ -9,9 +9,12 @@ from sklearn.preprocessing import StandardScaler
 
 from src.model_v5 import (
     FEATURE_COLUMNS_V5,
-    TARGET_COLUMN_V5,
+    CROSS_SECTIONAL_TARGET,
 )
-
+from src.cross_sectional import (
+    CROSS_SECTIONAL_TARGET,
+    add_cross_sectional_target,
+)
 
 FEATURE_COLUMNS_V6 = [
     f"CS {column}"
@@ -99,7 +102,7 @@ def train_model_v6(
         subset=(
             FEATURE_COLUMNS_V6
             + [
-                TARGET_COLUMN_V5,
+                CROSS_SECTIONAL_TARGET,
             ]
         )
     )
@@ -119,7 +122,7 @@ def train_model_v6(
             FEATURE_COLUMNS_V6
         ],
         clean[
-            TARGET_COLUMN_V5
+            CROSS_SECTIONAL_TARGET
         ],
     )
 

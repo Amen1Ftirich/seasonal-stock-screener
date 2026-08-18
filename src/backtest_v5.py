@@ -5,10 +5,15 @@ import pandas as pd
 
 from src.model_v5 import (
     FEATURE_COLUMNS_V5,
-    TARGET_COLUMN_V5,
+    CROSS_SECTIONAL_TARGET,
     add_cross_sectional_target,
     predict_cross_section_v5,
     train_model_v5,
+)
+
+from src.cross_sectional import (
+    CROSS_SECTIONAL_TARGET,
+    add_cross_sectional_target,
 )
 def run_walk_forward_v5(
     panel: pd.DataFrame,
@@ -153,7 +158,7 @@ def run_walk_forward_v5(
             subset=(
                 FEATURE_COLUMNS_V5
                 + [
-                    TARGET_COLUMN_V5,
+                    CROSS_SECTIONAL_TARGET,
                 ]
             )
         )

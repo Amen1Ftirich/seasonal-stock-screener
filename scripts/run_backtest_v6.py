@@ -92,13 +92,13 @@ monthly, predictions = (
 #
 
 monthly.to_csv(
-    "data/cache/v5_monthly.csv",
+    "data/cache/v6_monthly.csv",
     index=False,
 )
 
 
 predictions.to_parquet(
-    "data/cache/v5_predictions.parquet",
+    "data/cache/v6_predictions.parquet",
     index=False,
 )
 
