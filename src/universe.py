@@ -13,6 +13,10 @@ SP500_URL = (
     "https://en.wikipedia.org/wiki/"
     "List_of_S%26P_500_companies"
 )
+SP500_HISTORY_URL = (
+    "https://en.wikipedia.org/wiki/"
+    "Historical_components_of_the_S%26P_500"
+)
 SP500_CHANGES_CACHE = (
     CACHE_DIR / "sp500_changes.csv"
 )
@@ -177,16 +181,56 @@ def _column_name(
 
     return str(column).strip().lower()
 
+def _clean_sp500_changes(
+    changes: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Standardize parsed constituent changes.
+    """
+
+    result = changes.copy()
+
+    result["Date"] = pd.to_datetime(
+        result["Date"],
+        errors="coerce",
+    )
+
+    result["Added"] = (
+        result["Added"]
+        .apply(_normalize_ticker)
+    )
+
+    result["Removed"] = (
+        result["Removed"]
+        .apply(_normalize_ticker)
+    )
+
+    result = (
+        result
+        .dropna(
+            subset=["Date"]
+        )
+        .sort_values("Date")
+        .reset_index(drop=True)
+    )
+
+    return result
 
 def download_sp500_changes() -> pd.DataFrame:
     """
-    Download the Wikipedia S&P 500 component-change
-    table.
+    Download historical S&P 500 constituent changes.
 
-    Output:
-        Date
-        Added
-        Removed
+    Source:
+        Wikipedia historical S&P 500 components page.
+
+    Expected table structure:
+
+        Effective Date
+        Added -> Ticker
+        Added -> Security
+        Removed -> Ticker
+        Removed -> Security
+        Reason
     """
 
     headers = {
@@ -200,7 +244,7 @@ def download_sp500_changes() -> pd.DataFrame:
     }
 
     response = requests.get(
-        SP500_URL,
+        SP500_HISTORY_URL,
         headers=headers,
         timeout=30,
     )
@@ -208,106 +252,165 @@ def download_sp500_changes() -> pd.DataFrame:
     response.raise_for_status()
 
     tables = pd.read_html(
-        StringIO(
-            response.text
-        )
+        StringIO(response.text)
     )
 
     for table in tables:
 
-        columns = {
-            _column_name(column):
-                column
+        #
+        # The historical table should have:
+        #
+        # Effective Date
+        # Added Ticker
+        # Added Security
+        # Removed Ticker
+        # Removed Security
+        #
+        # pandas will usually parse this as
+        # a MultiIndex.
+        #
 
-            for column in table.columns
-        }
-
-        date_column = None
-        added_column = None
-        removed_column = None
-
-        for name, original in columns.items():
-
-            if (
-                "date" in name
-                and date_column is None
-            ):
-                date_column = original
-
-            if (
-                "added" in name
-                and "ticker" in name
-            ):
-                added_column = original
-
-            if (
-                "removed" in name
-                and "ticker" in name
-            ):
-                removed_column = original
-
-        if (
-            date_column is not None
-            and added_column is not None
-            and removed_column is not None
+        if isinstance(
+            table.columns,
+            pd.MultiIndex,
         ):
 
-            changes = pd.DataFrame(
-                {
-                    "Date":
-                        table[
-                            date_column
-                        ],
+            date_column = None
+            added_ticker_column = None
+            removed_ticker_column = None
 
-                    "Added":
-                        table[
-                            added_column
-                        ],
+            for column in table.columns:
 
-                    "Removed":
-                        table[
-                            removed_column
-                        ],
-                }
-            )
+                parts = [
+                    str(part)
+                    .strip()
+                    .lower()
 
-            changes["Date"] = (
-                pd.to_datetime(
-                    changes["Date"],
-                    errors="coerce",
+                    for part in column
+                ]
+
+                joined = " ".join(parts)
+
+                if (
+                    "effective date" in joined
+                    or (
+                        "date" in joined
+                        and date_column is None
+                    )
+                ):
+                    date_column = column
+
+                if (
+                    "added" in joined
+                    and "ticker" in joined
+                ):
+                    added_ticker_column = column
+
+                if (
+                    "removed" in joined
+                    and "ticker" in joined
+                ):
+                    removed_ticker_column = column
+
+            if (
+                date_column is not None
+                and added_ticker_column is not None
+                and removed_ticker_column is not None
+            ):
+
+                changes = pd.DataFrame(
+                    {
+                        "Date":
+                            table[
+                                date_column
+                            ],
+
+                        "Added":
+                            table[
+                                added_ticker_column
+                            ],
+
+                        "Removed":
+                            table[
+                                removed_ticker_column
+                            ],
+                    }
                 )
-            )
 
-            changes["Added"] = (
-                changes["Added"]
-                .apply(
-                    _normalize_ticker
+                cleaned = _clean_sp500_changes(
+                    changes
                 )
-            )
 
-            changes["Removed"] = (
-                changes["Removed"]
-                .apply(
-                    _normalize_ticker
-                )
-            )
+                if not cleaned.empty:
+                    return cleaned
 
-            changes = (
-                changes
-                .dropna(
-                    subset=["Date"]
-                )
-                .sort_values("Date")
-                .reset_index(drop=True)
-            )
+        #
+        # Fallback in case pandas gives us
+        # ordinary one-level columns.
+        #
 
-            return changes
+        column_names = [
+            str(column)
+            .strip()
+            .lower()
+
+            for column in table.columns
+        ]
+
+        if not any(
+            "date" in name
+            for name in column_names
+        ):
+            continue
+
+        #
+        # Historical table has at least:
+        #
+        # Date
+        # Added ticker
+        # Added security
+        # Removed ticker
+        # Removed security
+        #
+        if table.shape[1] < 5:
+            continue
+
+        first_column = pd.to_datetime(
+            table.iloc[:, 0],
+            errors="coerce",
+        )
+
+        valid_date_ratio = (
+            first_column.notna().mean()
+        )
+
+        if valid_date_ratio < 0.50:
+            continue
+
+        changes = pd.DataFrame(
+            {
+                "Date":
+                    table.iloc[:, 0],
+
+                "Added":
+                    table.iloc[:, 1],
+
+                "Removed":
+                    table.iloc[:, 3],
+            }
+        )
+
+        cleaned = _clean_sp500_changes(
+            changes
+        )
+
+        if not cleaned.empty:
+            return cleaned
 
     raise ValueError(
-        "Could not locate the S&P 500 "
-        "component-change table."
+        "Could not locate the historical "
+        "S&P 500 component-change table."
     )
-
 
 def get_sp500_changes(
     force_refresh: bool = False,
