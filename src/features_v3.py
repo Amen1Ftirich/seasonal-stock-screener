@@ -305,7 +305,9 @@ def build_stock_features(
     seasonal_beat = []
     seasonal_q25 = []
     seasonal_samples = []
-
+    residual_season_mean = []
+    residual_season_recent = []
+    residual_season_median = []
     for index, row in data.iterrows():
 
         month = row["Calendar Month"]
@@ -321,6 +323,10 @@ def build_stock_features(
             "Excess Return"
         ].dropna()
 
+        residual_history = history[
+            "Residual Return"
+        ].dropna()
+
         seasonal_samples.append(
             len(excess)
         )
@@ -332,7 +338,52 @@ def build_stock_features(
             seasonal_median.append(np.nan)
             seasonal_beat.append(np.nan)
             seasonal_q25.append(np.nan)
+            residual_season_mean.append(
+                np.nan
+            )
 
+            residual_season_recent.append(
+                np.nan
+            )
+
+            residual_season_median.append(
+                np.nan
+            )         
+            if len(residual_history) == 0:
+
+                residual_season_mean.append(
+                    np.nan
+                )
+
+                residual_season_recent.append(
+                    np.nan
+                )
+
+                residual_season_median.append(
+                    np.nan
+                )
+
+            else:
+
+                residual_season_mean.append(
+                    float(
+                        residual_history.mean()
+                    )
+                )
+
+                residual_season_recent.append(
+                    float(
+                        residual_history
+                        .tail(5)
+                        .mean()
+                    )
+                )
+
+                residual_season_median.append(
+                    float(
+                        residual_history.median()
+                    )
+                )   
             continue
 
         seasonal_mean.append(
@@ -367,6 +418,17 @@ def build_stock_features(
     data["Season Beat Rate"] = seasonal_beat
     data["Season Q25"] = seasonal_q25
     data["Season Samples"] = seasonal_samples
+    data["Residual Season Mean"] = (
+        residual_season_mean
+    )
+
+    data["Residual Season Recent"] = (
+        residual_season_recent
+    )
+
+    data["Residual Season Median"] = (
+        residual_season_median
+    )
 
     #
     # MARKET REGIME FEATURES
