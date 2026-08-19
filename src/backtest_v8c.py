@@ -7,17 +7,18 @@ from src.cross_sectional import (
     add_beta_neutral_target,
 )
 
-from src.model_v8b import (
-    TARGET_COLUMN_V8B,
-    predict_cross_section_v8b,
-    train_model_v8b,
+from src.model_v8c import (
+    TARGET_COLUMN_V8C,
+    predict_cross_section_v8c,
+    train_model_v8c,
 )
 
-from src.fundamental_features_v8b import (
-    FEATURE_COLUMNS_V8B,
-    add_cross_sectional_fundamental_features,
+from src.fundamental_features_v8c import (
+    FEATURE_COLUMNS_V8C,
+    add_cross_sectional_quarterly_features,
 )
-def run_walk_forward_v8b(
+
+def run_walk_forward_v8c(
     panel: pd.DataFrame,
     membership_by_period: (
         dict[pd.Period, set[str]]
@@ -98,7 +99,7 @@ def run_walk_forward_v8b(
         )        
     )
     data = (
-        add_cross_sectional_fundamental_features(
+        add_cross_sectional_quarterly_features(
             data
         )
     )
@@ -162,16 +163,16 @@ def run_walk_forward_v8b(
 
         train = train.dropna(
             subset=(
-                FEATURE_COLUMNS_V8B
+                FEATURE_COLUMNS_V8C
                 + [
-                    TARGET_COLUMN_V8B,
+                    TARGET_COLUMN_V8C,
                 ]
             )
         )
 
 
         test = test.dropna(
-            subset=FEATURE_COLUMNS_V8B
+            subset=FEATURE_COLUMNS_V8C
         )
 
 
@@ -182,14 +183,14 @@ def run_walk_forward_v8b(
             continue
 
 
-        model = train_model_v8b(
+        model = train_model_v8c(
             training_data=train,
             alpha=alpha,
         )
 
 
         predicted = (
-            predict_cross_section_v8b(
+            predict_cross_section_v8c(
                 model=model,
                 cross_section=test,
             )
@@ -205,7 +206,7 @@ def run_walk_forward_v8b(
 
         prediction_beta_corr = (
             predicted[
-                "V8B Prediction"
+                "V8C Prediction"
             ]
             .corr(
                 predicted[
@@ -239,8 +240,8 @@ def run_walk_forward_v8b(
 
         valid = predicted.dropna(
             subset=[
-                "V8B Prediction",
-                TARGET_COLUMN_V8B,
+                "V8C Prediction",
+                TARGET_COLUMN_V8C,
                 "Beta Neutral Return",
             ]
         )
@@ -248,11 +249,11 @@ def run_walk_forward_v8b(
 
         ic = (
             valid[
-                "V8B Prediction"
+                "V8C Prediction"
             ]
             .corr(
                 valid[
-                    TARGET_COLUMN_V8B
+                    TARGET_COLUMN_V8C
                 ],
                 method="spearman",
             )
@@ -459,7 +460,7 @@ def _mean_t_stat(
     )
 
 
-def summarize_v8b(
+def summarize_v8c(
     monthly: pd.DataFrame,
 ) -> dict:
 
