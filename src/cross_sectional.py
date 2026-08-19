@@ -77,7 +77,9 @@ def add_beta_neutral_target(
     result[
         "Beta Neutral Target"
     ] = np.nan
-
+    result[
+        "Beta Neutral Return"
+    ] = np.nan
 
     for period, group in result.groupby(
         "Period"
@@ -153,7 +155,10 @@ def add_beta_neutral_target(
                 ddof=1
             )
         )
-
+        result.loc[
+            valid.index,
+            "Beta Neutral Return",
+        ] = residual
 
         if residual_std <= 0:
             continue
