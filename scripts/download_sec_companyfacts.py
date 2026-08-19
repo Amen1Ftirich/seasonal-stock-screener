@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import pandas as pd
 
 from src.sec_data import (
@@ -9,40 +7,32 @@ from src.sec_data import (
     normalize_ticker,
 )
 
-
-PREDICTIONS_FILE = (
-    Path(
-        "data/cache/v8_predictions.parquet"
-    )
+from src.universe import (
+    get_sp500_historical_union,
 )
+
 
 RESOLUTION_FILE = (
-    Path(
-        "data/cache/sec_identifier_resolution.csv"
+    "data/cache/sec_identifier_resolution.csv"
+)
+
+
+print(
+    "Loading 2006+ historical S&P universe..."
+)
+
+
+historical_tickers = {
+    normalize_ticker(ticker)
+
+    for ticker in get_sp500_historical_union(
+        start_date="2006-01-01"
     )
-)
-
-
-predictions = pd.read_parquet(
-    PREDICTIONS_FILE
-)
+}
 
 
 resolution = pd.read_csv(
     RESOLUTION_FILE
-)
-
-
-predictions[
-    "Ticker"
-] = (
-    predictions[
-        "Ticker"
-    ]
-    .astype(str)
-    .apply(
-        normalize_ticker
-    )
 )
 
 
@@ -59,64 +49,33 @@ resolution[
 )
 
 
-#
-# Only companies that actually appeared in
-# our 2016-2025 OOS research universe.
-#
-
-tickers = sorted(
-    predictions[
+universe = resolution[
+    resolution[
         "Ticker"
-    ].unique()
-)
-
-
-universe = (
-    pd.DataFrame(
-        {
-            "Ticker":
-                tickers,
-        }
+    ].isin(
+        historical_tickers
     )
-    .merge(
-        resolution[
-            [
-                "Ticker",
-                "CIK",
-                "Resolution",
-            ]
-        ],
-        on="Ticker",
-        how="left",
-    )
-)
+].copy()
 
 
-universe = universe[
+resolved = universe[
     universe[
         "CIK"
     ].notna()
 ].copy()
 
 
-universe[
+resolved[
     "CIK"
 ] = (
-    universe[
+    resolved[
         "CIK"
     ].astype(int)
 )
 
 
-#
-# One CIK may theoretically have more than
-# one historical ticker.
-#
-# Download the company only once.
-#
-
 unique_ciks = (
-    universe[
+    resolved[
         [
             "CIK",
         ]
@@ -128,12 +87,13 @@ unique_ciks = (
 )
 
 
+print()
 print(
     "======================================"
 )
 
 print(
-    "SEC COMPANY FACTS DOWNLOAD"
+    "FULL HISTORICAL SEC DOWNLOAD"
 )
 
 print(
@@ -141,17 +101,17 @@ print(
 )
 
 print(
-    f"OOS tickers: "
-    f"{len(tickers)}"
+    f"Historical tickers: "
+    f"{len(historical_tickers)}"
 )
 
 print(
-    f"Resolved tickers: "
-    f"{len(universe)}"
+    f"Resolved historical tickers: "
+    f"{len(resolved)}"
 )
 
 print(
-    f"Unique CIKs: "
+    f"Unique CIKs required: "
     f"{len(unique_ciks)}"
 )
 
@@ -248,7 +208,7 @@ status = pd.DataFrame(
 
 status.to_csv(
     "data/cache/"
-    "sec_companyfacts_download_status.csv",
+    "sec_companyfacts_full_status.csv",
     index=False,
 )
 
@@ -266,7 +226,7 @@ print(
 )
 
 print(
-    "DOWNLOAD COMPLETE"
+    "FULL DOWNLOAD COMPLETE"
 )
 
 print(
@@ -274,8 +234,7 @@ print(
 )
 
 print(
-    f"Success: "
-    f"{successes}"
+    f"Success: {successes}"
 )
 
 print(
