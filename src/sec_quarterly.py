@@ -479,6 +479,53 @@ def build_single_quarter_observations(
         "Source Priority"
     ] = 0
 
+    #
+    # Diluted shares are weighted averages,
+    # not additive flows.
+    #
+    # Therefore:
+    #
+    #     FY shares - 9M shares
+    #
+    # is NOT a valid Q4 calculation.
+    #
+    # Keep only explicitly reported
+    # single-quarter diluted-share values.
+    #
+
+    concept_name = str(
+        observations[
+            "Concept"
+        ].iloc[0]
+    )
+
+
+    if (
+        concept_name
+        == "Diluted Shares"
+    ):
+
+        return (
+            direct
+            .sort_values(
+                [
+                    "End",
+                    "Filed",
+                    "Alias Priority",
+                ]
+            )
+            .drop_duplicates(
+                subset=[
+                    "Concept",
+                    "End",
+                    "Filed",
+                ],
+                keep="first",
+            )
+            .reset_index(
+                drop=True
+            )
+        )
 
     derived_rows = []
 
