@@ -6,7 +6,6 @@ import pandas as pd
 import requests
 from src.config import CACHE_DIR
 
-
 SP500_CACHE = CACHE_DIR / "sp500_universe.csv"
 
 SP500_URL = (
@@ -20,6 +19,41 @@ SP500_HISTORY_URL = (
 SP500_CHANGES_CACHE = (
     CACHE_DIR / "sp500_changes.csv"
 )
+def _read_html_tables(
+    url: str,
+) -> list[pd.DataFrame]:
+    """
+    Download an HTML page with a browser-style
+    User-Agent, then let pandas parse its tables.
+
+    This avoids HTTP 403 errors from sites such
+    as Wikipedia when pd.read_html() requests
+    the URL directly.
+    """
+
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 "
+            "(Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 "
+            "(KHTML, like Gecko) "
+            "Chrome/151.0 Safari/537.36"
+        )
+    }
+
+    response = requests.get(
+        url,
+        headers=headers,
+        timeout=30,
+    )
+
+    response.raise_for_status()
+
+    return pd.read_html(
+        StringIO(
+            response.text
+        )
+    )
 
 TECH_TEST_UNIVERSE = [
     "AAPL",
@@ -126,31 +160,31 @@ def get_sp500_tickers(
 
     return result["Symbol"].tolist()
 def _normalize_ticker(
-    ticker,
-) -> str | None:
+    ticker: str,
+) -> str:
     """
-    Normalize Wikipedia tickers into Yahoo-style symbols.
+    Normalize ticker formatting across sources.
 
-    Example:
-        BRK.B -> BRK-B
+    Examples:
+        BRK.B  -> BRK-B
+        ALLE | -> ALLE
     """
 
-    if pd.isna(ticker):
-        return None
-
-    ticker = str(ticker).strip()
-
-    if (
-        not ticker
-        or ticker.lower() == "nan"
-    ):
-        return None
-
-    return ticker.replace(
-        ".",
-        "-",
+    value = (
+        str(ticker)
+        .replace("\xa0", " ")
+        .strip()
+        .upper()
     )
 
+    if "|" in value:
+        value = (
+            value
+            .split("|", 1)[0]
+            .strip()
+        )
+
+    return value.replace(".", "-")
 
 def _column_name(
     column,
@@ -673,3 +707,407 @@ def build_sp500_membership_map(
         )
 
     return membership_map
+def _flatten_table_columns(
+    table: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Flatten pandas MultiIndex columns produced by
+    Wikipedia tables.
+    """
+
+    result = table.copy()
+
+    flattened = []
+
+    for column in result.columns:
+
+        if isinstance(
+            column,
+            tuple,
+        ):
+
+            parts = [
+                str(part).strip()
+
+                for part in column
+
+                if (
+                    str(part).strip()
+                    and
+                    not str(part).startswith(
+                        "Unnamed"
+                    )
+                )
+            ]
+
+            flattened.append(
+                " ".join(parts)
+            )
+
+        else:
+
+            flattened.append(
+                str(column).strip()
+            )
+
+    result.columns = flattened
+
+    return result
+
+
+def get_sp500_change_details() -> pd.DataFrame:
+    """
+    Return historical S&P changes WITH company names.
+
+    Expected columns:
+
+        Date
+        Added
+        Added Security
+        Removed
+        Removed Security
+    """
+
+    tables = _read_html_tables(
+        SP500_HISTORY_URL
+    )
+
+    change_table = None
+
+    for table in tables:
+
+        flat = _flatten_table_columns(
+            table
+        )
+
+        columns_lower = {
+            column.lower():
+                column
+
+            for column in flat.columns
+        }
+
+        has_date = any(
+            "date" in column
+            for column in columns_lower
+        )
+
+        has_added = any(
+            "added" in column
+            for column in columns_lower
+        )
+
+        has_removed = any(
+            "removed" in column
+            for column in columns_lower
+        )
+
+        if (
+            has_date
+            and has_added
+            and has_removed
+        ):
+
+            change_table = flat
+            break
+
+    if change_table is None:
+
+        raise ValueError(
+            "Could not find S&P 500 "
+            "historical change table"
+        )
+
+
+    def find_column(
+        include_words: list[str],
+    ) -> str | None:
+
+        for column in (
+            change_table.columns
+        ):
+
+            lower = column.lower()
+
+            if all(
+                word in lower
+                for word in include_words
+            ):
+
+                return column
+
+        return None
+
+
+    date_column = (
+        find_column(
+            ["date"]
+        )
+    )
+
+    added_ticker_column = (
+        find_column(
+            ["added", "ticker"]
+        )
+    )
+
+    added_security_column = (
+        find_column(
+            ["added", "security"]
+        )
+    )
+
+    removed_ticker_column = (
+        find_column(
+            ["removed", "ticker"]
+        )
+    )
+
+    removed_security_column = (
+        find_column(
+            ["removed", "security"]
+        )
+    )
+
+
+    required = {
+        "date":
+            date_column,
+
+        "added ticker":
+            added_ticker_column,
+
+        "added security":
+            added_security_column,
+
+        "removed ticker":
+            removed_ticker_column,
+
+        "removed security":
+            removed_security_column,
+    }
+
+
+    missing = [
+        name
+
+        for name, column
+        in required.items()
+
+        if column is None
+    ]
+
+
+    if missing:
+
+        raise ValueError(
+            "Missing S&P history columns: "
+            + ", ".join(
+                missing
+            )
+            + "\nFound columns: "
+            + str(
+                change_table.columns.tolist()
+            )
+        )
+
+
+    result = pd.DataFrame(
+        {
+            "Date":
+                pd.to_datetime(
+                    change_table[
+                        date_column
+                    ],
+                    errors="coerce",
+                ),
+
+            "Added":
+                change_table[
+                    added_ticker_column
+                ],
+
+            "Added Security":
+                change_table[
+                    added_security_column
+                ],
+
+            "Removed":
+                change_table[
+                    removed_ticker_column
+                ],
+
+            "Removed Security":
+                change_table[
+                    removed_security_column
+                ],
+        }
+    )
+
+
+    for column in [
+        "Added",
+        "Removed",
+    ]:
+
+        result[
+            column
+        ] = (
+            result[
+                column
+            ]
+            .apply(
+                lambda value:
+                    _normalize_ticker(
+                        value
+                    )
+                    if pd.notna(value)
+                    else None
+            )
+        )
+
+
+    return (
+        result
+        .dropna(
+            subset=["Date"]
+        )
+        .sort_values("Date")
+        .reset_index(drop=True)
+    )
+
+
+def get_current_sp500_name_map(
+) -> dict[str, str]:
+    """
+    Current ticker -> company/security name.
+    """
+
+    tables = _read_html_tables(
+        SP500_URL
+    )
+
+    table = tables[0].copy()
+
+    result = {}
+
+
+    for _, row in table.iterrows():
+
+        ticker = _normalize_ticker(
+            row["Symbol"]
+        )
+
+        name = str(
+            row["Security"]
+        ).strip()
+
+        result[
+            ticker
+        ] = name
+
+
+    return result
+
+
+def get_sp500_ticker_name_map(
+) -> dict[str, list[str]]:
+    """
+    Build:
+
+        ticker -> all historical company names
+
+    from current components and historical changes.
+    """
+
+    names = {}
+
+
+    def add_name(
+        ticker,
+        company_name,
+    ):
+
+        if (
+            ticker is None
+            or pd.isna(ticker)
+            or company_name is None
+            or pd.isna(company_name)
+        ):
+            return
+
+        ticker = _normalize_ticker(
+            ticker
+        )
+
+        company_name = str(
+            company_name
+        ).strip()
+
+        if (
+            not ticker
+            or not company_name
+            or company_name.lower()
+            == "nan"
+        ):
+            return
+
+        names.setdefault(
+            ticker,
+            set(),
+        ).add(
+            company_name
+        )
+
+
+    #
+    # Current companies.
+    #
+
+    current = (
+        get_current_sp500_name_map()
+    )
+
+    for ticker, name in (
+        current.items()
+    ):
+
+        add_name(
+            ticker,
+            name,
+        )
+
+
+    #
+    # Historical additions/removals.
+    #
+
+    changes = (
+        get_sp500_change_details()
+    )
+
+
+    for _, row in (
+        changes.iterrows()
+    ):
+
+        add_name(
+            row["Added"],
+            row["Added Security"],
+        )
+
+        add_name(
+            row["Removed"],
+            row["Removed Security"],
+        )
+
+
+    return {
+        ticker:
+            sorted(
+                company_names
+            )
+
+        for ticker, company_names
+        in names.items()
+    }
